@@ -131,7 +131,7 @@ class ContrastiveLearningViewGenerator(object):
 
 
 def info_nce_logits(features, args):
-    
+
     b_ = 0.5 * int(features.size(0))
     labels = torch.cat([torch.arange(b_) for i in range(args.n_views)], dim=0)
     labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
@@ -192,8 +192,10 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
             mask_lab = mask_lab[:, 0]
 
             class_labels, mask_lab = class_labels.to(device), mask_lab.to(device).bool()
+            print(len(images))
+            print(images[0].shape)
             images = torch.cat(images, dim=0).to(device)
-
+            print(images.shape)
             # Extract features with base model
             features = model(images)
 
@@ -237,6 +239,7 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            break
 
 
         print('Train Epoch: {} Avg Loss: {:.4f} | Seen Class Acc: {:.4f} '.format(epoch, loss_record.avg,
@@ -246,7 +249,7 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
         with torch.no_grad():
 
             print('Testing on unlabelled examples in the training data...')
-            all_acc, old_acc, new_acc = test_kmeans(model, unlabelled_train_loader,
+            all_acc, old_acc, new_acc = test_kmeans(model, test_loader,
                                                     epoch=epoch, save_name='Train ACC Unlabelled',
                                                     args=args)
 
@@ -267,8 +270,8 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
         args.writer.add_scalar('Train Acc Labelled Data', train_acc_record.avg, epoch)
         args.writer.add_scalar('LR', get_mean_lr(optimizer), epoch)
 
-        # print('Train Accuracies: All {:.4f} | Old {:.4f} | New {:.4f}'.format(all_acc, old_acc,
-        #                                                                       new_acc))
+        print('Train Accuracies: All {:.4f} | Old {:.4f} | New {:.4f}'.format(all_acc, old_acc,
+                                                                              new_acc))
         print('Test Accuracies: All {:.4f} | Old {:.4f} | New {:.4f}'.format(all_acc_test, old_acc_test,
                                                                                 new_acc_test))
 
@@ -312,7 +315,6 @@ def test_kmeans(model, test_loader,
 
         # images = images.cuda()
 
-
         # Pass features through base model and then additional learnable transform (linear layer)
         feats = model(images)
 
@@ -335,6 +337,9 @@ def test_kmeans(model, test_loader,
     # -----------------------
     # EVALUATE
     # -----------------------
+    print(targets.shape)
+    print(preds.shape)
+    print(mask.shape)
     all_acc, old_acc, new_acc = log_accs_from_preds(y_true=targets, y_pred=preds, mask=mask,
                                                     T=epoch, eval_funcs=args.eval_funcs, save_name=save_name,
                                                     writer=args.writer)
@@ -467,6 +472,7 @@ if __name__ == "__main__":
                                         batch_size=args.batch_size, shuffle=False)
     test_loader_labelled = DataLoader(test_dataset, num_workers=args.num_workers,
                                       batch_size=args.batch_size, shuffle=False)
+    
 
     # ----------------------
     # PROJECTION HEAD

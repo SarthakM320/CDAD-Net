@@ -80,6 +80,7 @@ def get_datasets(dataset_name, train_transform, test_transform, args):
                                   unlabelled_dataset=deepcopy(datasets['train_unlabelled']))
 
     test_dataset = datasets['test']
+    test_dataset.transform = test_transform
     unlabelled_train_examples_test = deepcopy(datasets['train_unlabelled'])
     unlabelled_train_examples_test.transform = test_transform
 
