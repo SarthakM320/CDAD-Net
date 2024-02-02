@@ -14,7 +14,7 @@ echo $EXP_NUM
 
 python -m methods.contrastive_training.contrastive_training \
             --dataset_name 'officehome' \
-            --batch_size 8 \
+            --batch_size 4 \
             --grad_from_block 11 \
             --epochs 100 \
             --base_model vit_dino \

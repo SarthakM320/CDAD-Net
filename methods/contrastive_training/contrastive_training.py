@@ -85,9 +85,10 @@ class SupConLoss(torch.nn.Module):
             raise ValueError('Unknown mode: {}'.format(self.contrast_mode))
 
         # compute logits
-        anchor_dot_contrast = torch.div(
-            torch.matmul(anchor_feature, contrast_feature.T),
-            self.temperature)
+        
+        anchor_dot_contrast = torch.matmul(anchor_feature, contrast_feature.T)/self.temperature
+            
+            
 
         # for numerical stability
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
@@ -130,9 +131,8 @@ class ContrastiveLearningViewGenerator(object):
 
 
 def info_nce_logits(features, args):
-
+    
     b_ = 0.5 * int(features.size(0))
-
     labels = torch.cat([torch.arange(b_) for i in range(args.n_views)], dim=0)
     labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
     labels = labels.to(device)
@@ -151,6 +151,7 @@ def info_nce_logits(features, args):
     # assert similarity_matrix.shape == labels.shape
 
     # select and combine multiple positives
+    
     positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
 
     # select only the negatives the negatives
@@ -163,7 +164,7 @@ def info_nce_logits(features, args):
     return logits, labels
 
 
-def train(projection_head, model, train_loader, test_loader, val_dataloader, args):
+def train(projection_head, model, train_loader, test_loader, unlabelled_train_loader, args):
 
     optimizer = SGD(list(projection_head.parameters()) + list(model.parameters()), lr=args.lr, momentum=args.momentum,
                     weight_decay=args.weight_decay)
@@ -216,10 +217,13 @@ def train(projection_head, model, train_loader, test_loader, val_dataloader, arg
 
             # Supervised contrastive loss
             f1, f2 = [f[mask_lab] for f in features.chunk(2)]
-            sup_con_feats = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-            sup_con_labels = class_labels[mask_lab]
+            if np.array(mask_lab).any():
+                sup_con_feats = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+                sup_con_labels = class_labels[mask_lab]
 
-            sup_con_loss = sup_con_crit(sup_con_feats, labels=sup_con_labels)
+                sup_con_loss = sup_con_crit(sup_con_feats, labels=sup_con_labels)
+            else:
+                sup_con_loss = 0
 
             # Total loss
             loss = (1 - args.sup_con_weight) * contrastive_loss + args.sup_con_weight * sup_con_loss
@@ -241,10 +245,10 @@ def train(projection_head, model, train_loader, test_loader, val_dataloader, arg
 
         with torch.no_grad():
 
-            # print('Testing on unlabelled examples in the training data...')
-            # all_acc, old_acc, new_acc = test_kmeans(model, unlabelled_train_loader,
-            #                                         epoch=epoch, save_name='Train ACC Unlabelled',
-            #                                         args=args)
+            print('Testing on unlabelled examples in the training data...')
+            all_acc, old_acc, new_acc = test_kmeans(model, unlabelled_train_loader,
+                                                    epoch=epoch, save_name='Train ACC Unlabelled',
+                                                    args=args)
 
             # print('Testing on val set...')
             # all_acc, old_acc, new_acc = test_kmeans(model, val_dataloader,
@@ -434,33 +438,33 @@ if __name__ == "__main__":
     # --------------------
     # DATASETS
     # --------------------
-    # train_dataset, test_dataset, unlabelled_train_examples_test, datasets = get_datasets(args.dataset_name,
-    #                                                                                      train_transform,
-    #                                                                                      test_transform,
-    #                                                                                      args)
-    train_dataset, test_dataset, datasets = get_datasets(args.dataset_name,
+    train_dataset, test_dataset, unlabelled_train_examples_test, datasets = get_datasets(args.dataset_name,
                                                                                          train_transform,
                                                                                          test_transform,
                                                                                          args)
+    # train_dataset, test_dataset, datasets = get_datasets(args.dataset_name,
+    #                                                                                      train_transform,
+    #                                                                                      test_transform,
+                                                                                        #  args)
 
 
     # --------------------
     # SAMPLER
     # Sampler which balances labelled and unlabelled examples in each batch
     # --------------------
-    # label_len = len(train_dataset.labelled_dataset)
-    # unlabelled_len = len(train_dataset.unlabelled_dataset)
-    # sample_weights = [1 if i < label_len else label_len / unlabelled_len for i in range(len(train_dataset))]
-    # sample_weights = torch.DoubleTensor(sample_weights)
-    # sampler = torch.utils.data.WeightedRandomSampler(sample_weights, num_samples=len(train_dataset))
+    label_len = len(train_dataset.labelled_dataset)
+    unlabelled_len = len(train_dataset.unlabelled_dataset)
+    sample_weights = [1 if i < label_len else label_len / unlabelled_len for i in range(len(train_dataset))]
+    sample_weights = torch.DoubleTensor(sample_weights)
+    sampler = torch.utils.data.WeightedRandomSampler(sample_weights, num_samples=len(train_dataset))
 
     # --------------------
     # DATALOADERS
     # --------------------
-    train_loader = DataLoader(train_dataset, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False, drop_last=True)
-    val_dataloader = DataLoader(datasets['val'], num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False, drop_last=True)
-    # test_loader_unlabelled = DataLoader(unlabelled_train_examples_test, num_workers=args.num_workers,
-    #                                     batch_size=args.batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False, drop_last=True,sampler = sampler)
+    # val_dataloader = DataLoader(datasets['val'], num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False, drop_last=True)
+    test_loader_unlabelled = DataLoader(unlabelled_train_examples_test, num_workers=args.num_workers,
+                                        batch_size=args.batch_size, shuffle=False)
     test_loader_labelled = DataLoader(test_dataset, num_workers=args.num_workers,
                                       batch_size=args.batch_size, shuffle=False)
 
@@ -474,5 +478,5 @@ if __name__ == "__main__":
     # ----------------------
     # TRAIN
     # ----------------------
-    # train(projection_head, model, train_loader, test_loader_labelled, test_loader_unlabelled, args)
-    train(projection_head, model, train_loader, test_loader_labelled, val_dataloader, args)
+    train(projection_head, model, train_loader, test_loader_labelled, test_loader_unlabelled, args)
+    # train(projection_head, model, train_loader, test_loader_labelled, val_dataloader, args)

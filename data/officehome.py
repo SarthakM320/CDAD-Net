@@ -101,13 +101,13 @@ def get_officehome_datasets(train_transform, test_transform, train_classes=range
     # Split into training and validation sets
     val_dataset_labelled = OfficeHome(transform=train_transform,split = 'val')
     val_dataset_labelled.transform = test_transform
-    test_dataset = OfficeHome(transform=test_transform, split='test')
+    test_dataset = OfficeHome(transform=train_transform, split='test')
 
     # Either split train into train and val or use test set as val
 
     all_datasets = {
         'train_labelled': train_dataset_labelled,
-        'train_unlabelled': None,
+        'train_unlabelled': test_dataset,
         'val': val_dataset_labelled,
         'test': test_dataset,
     }
