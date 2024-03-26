@@ -44,7 +44,7 @@ root = ''
 
 #         return image, target, self.uq_idxs[idx]
     
-class OfficeHome(Dataset):
+class PACS(Dataset):
     def __init__(self, split='train', num = 1, limit = 0, transform=None):
         self.loader = default_loader
         self.target_transform = None
@@ -52,7 +52,7 @@ class OfficeHome(Dataset):
         
 
         
-        self.data = f'../OfficeHomeDataset_10072016/{num}/{split}.csv'
+        self.data = f'../PACS/{num}/{split}.csv'
 
         self.data = pd.read_csv(self.data)
         self.images = self.data['image'].values
@@ -135,14 +135,14 @@ def get_train_val_indices(train_dataset, val_split=0.2):
 
     return train_idxs, val_idxs
 
-def get_officehome_datasets(train_transform, test_transform, split, train_classes=range(45), prop_train_labels=0.8,
+def get_pacs_datasets(train_transform, test_transform, split, train_classes=range(45), prop_train_labels=0.8,
                     split_train_val=False, seed=0):
     np.random.seed(seed)
 
-    train_dataset_labelled = OfficeHome(transform=train_transform, split='train_labelled', num=split)
-    train_dataset_unlabelled = OfficeHome(transform=train_transform, split='train_unlabelled', num=split)
+    train_dataset_labelled = PACS(transform=train_transform, split='train_labelled', num=split)
+    train_dataset_unlabelled = PACS(transform=train_transform, split='train_unlabelled', num=split)
     # Split into training and validation sets
-    test_dataset = OfficeHome(transform=test_transform, split='test', num=split)
+    test_dataset = PACS(transform=test_transform, split='test', num=split)
 
     # Either split train into train and val or use test set as val
 

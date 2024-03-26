@@ -22,7 +22,7 @@ from torch.nn import functional as F
 
 from project_utils.cluster_and_log_utils import log_accs_from_preds
 from config import dino_pretrain_path
-exp_root = 'outputs/'
+exp_root = 'pacs_ablation_6/'
 
 # TODO: Debug
 import warnings
@@ -157,9 +157,8 @@ def info_nce_logits(features, args):
     
     positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
 
-    # select only the negatives
+    # select only the negatives the negatives
     negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
-    # print(negatives.shape)
 
     logits = torch.cat([positives, negatives], dim=1)
     labels = torch.zeros(logits.shape[0], dtype=torch.long).to(device)
@@ -174,10 +173,8 @@ def loss_scheduler(epoch,num_epochs,min_weight=20,max_weight=200):
     return max((max_weight)/num_epochs * (num_epochs - epoch), min_weight)
 
 def train(projection_head, model, decoder, disc, train_loader, test_loader, unlabelled_train_loader, args):
+    
 
-    # classifier = nn.Sequential(
-    #     nn.Linear(args.feat_dim, args.num_labeled_classes)
-    # ).to(args.device)
     
     optimizer = SGD(list(projection_head.parameters()) + list(model.parameters()) + list(decoder.parameters()), lr=args.lr, momentum=args.momentum,
                     weight_decay=args.weight_decay)
@@ -211,7 +208,6 @@ def train(projection_head, model, decoder, disc, train_loader, test_loader, unla
 
         tsne_features = []
         tsne_labels = []
-        step_train = 0
 
         for batch_idx, batch in enumerate(tqdm(train_loader)):
 
@@ -288,35 +284,40 @@ def train(projection_head, model, decoder, disc, train_loader, test_loader, unla
             else:
                 sup_con_loss = 0
 
+            # Total loss
+            # margin_loss = 10*margin_loss_fn(mask_and_pos_reconstructed,mask_and_neg_reconstructed, mask, images) #sim, diff, mask, gt
             
-            output_disc_source = disc(cls_images.detach()[torch.cat([mask_lab for _ in range(2)])])
-            output_disc_target = disc(cls_images.detach()[~torch.cat([mask_lab for _ in range(2)])])
-            entropy_source = get_entropy(output_disc_source, centers.detach(), args)
-            entropy_target = get_entropy(output_disc_target,centers.detach(), args)
-            adv_loss_disc = 0.1*adv_loss_fn(entropy_source, entropy_target, torch.concat([mask_lab for _ in range(2)]), torch.concat([class_labels for _ in range(2)]))
+            # output_disc_source = disc(cls_images.detach()[torch.cat([mask_lab for _ in range(2)])])
+            # output_disc_target = disc(cls_images.detach()[~torch.cat([mask_lab for _ in range(2)])])
+            # entropy_source = get_entropy(output_disc_source, centers.detach(), args)
+            # entropy_target = get_entropy(output_disc_target,centers.detach(), args)
+            # adv_loss_disc = 0.1*adv_loss_fn(entropy_source, entropy_target, torch.concat([mask_lab for _ in range(2)]), torch.concat([class_labels for _ in range(2)]))
                 
             # optim_disc.zero_grad()
             # adv_loss_disc.backward(retain_graph = True)
             # optim_disc.step()
 
             
-            output_disc_source_2 = disc(cls_images[torch.cat([mask_lab for _ in range(2)])])
-            output_disc_target_2 = disc(cls_images[~torch.cat([mask_lab for _ in range(2)])],reverse=True)
-            entropy_source_2 = get_entropy(output_disc_source_2, centers.detach(), args)
-            entropy_target_2 = get_entropy(output_disc_target_2, centers.detach(), args)
-            adv_loss_gen = 0.1*adv_loss_fn(entropy_source_2,entropy_target_2, torch.concat([mask_lab for _ in range(2)]),torch.concat([class_labels for _ in range(2)]),disc=False)
+            # output_disc_source_2 = disc(cls_images[torch.cat([mask_lab for _ in range(2)])])
+            # output_disc_target_2 = disc(cls_images[~torch.cat([mask_lab for _ in range(2)])],reverse=True)
+            # entropy_source_2 = get_entropy(output_disc_source_2, centers.detach(), args)
+            # entropy_target_2 = get_entropy(output_disc_target_2, centers.detach(), args)
+            # adv_loss_gen = 0.1*adv_loss_fn(entropy_source_2,entropy_target_2, torch.concat([mask_lab for _ in range(2)]),torch.concat([class_labels for _ in range(2)]),disc=False)
             
-            # classes = classifier(cls_images)
-            # loss = nn.CrossEntropyLoss()(classes[torch.cat([mask_lab for _ in range(2)])],torch.concat([class_labels[mask_lab] for _ in range(2)]))            
+            cls_entropy = disc(cls_images[torch.cat([mask_lab for _ in range(2)])])
+            classes = F.softmax(get_entropy(cls_entropy, centers.detach(), args), dim = 1)
+            loss_cls = nn.CrossEntropyLoss()(classes,torch.concat([class_labels[mask_lab] for _ in range(2)]))            
             # loss = (1 - args.sup_con_weight) * (contrastive_loss) + args.sup_con_weight * sup_con_loss
-            
-            if epoch%2 == 0:
-                loss = adv_loss_gen + reconstruction_loss ** -10
-            else:
-                loss = 0.8*contrastive_loss + 0.8*margin_loss + 0.2*sup_con_loss + reconstruction_loss * 10**-5
-            # loss = contrastive_loss + reconstruction_loss * 10**-10
-            
-            # print(reconstruction_loss)
+            # if epoch%2 == 0:
+            #     loss = adv_loss_gen + reconstruction_loss*10 ** -10
+            # else:
+            #     loss = 0.8*contrastive_loss + 0.8*margin_loss + 0.2*sup_con_loss + reconstruction_loss*10**-5
+            # loss = (1 - args.sup_con_weight) * (contrastive_loss) + args.sup_con_weight * sup_con_loss
+            # if epoch%2 == 0:
+            #     loss = adv_loss_gen
+            # else:
+            # loss = loss_cls + 0.8 * sup_con_loss
+            loss = 0.8*contrastive_loss + 0.8*margin_loss + 0.2*sup_con_loss + reconstruction_loss*10**-5 + loss_cls
             
 
             # Train acc
@@ -332,21 +333,18 @@ def train(projection_head, model, decoder, disc, train_loader, test_loader, unla
             
 
             if batch_idx%5 == 0:
-                args.writer.add_scalar('Loss', loss.item(), step_train)
-                args.writer.add_scalar('Sup Loss', sup_con_loss.item(), step_train)
-                args.writer.add_scalar('Contrastive Loss', contrastive_loss.item(), step_train)
-                args.writer.add_scalar('Margin Loss', margin_loss.item(), step_train)
-                args.writer.add_scalar('Adv Disc Loss', adv_loss_disc.item(), step_train)
-                args.writer.add_scalar('Adv Gen Loss', adv_loss_gen.item(), step_train)
-                args.writer.add_scalar('Reconstruction Loss', reconstruction_loss.item(), step_train)
-                
-            step_train+=1
+                args.writer.add_scalar('Source Loss', loss_cls.item(), epoch)
+                args.writer.add_scalar('Sup Loss', sup_con_loss.item(), epoch)
+                # args.writer.add_scalar('Contrastive Loss', contrastive_loss.item(), epoch)
+                # args.writer.add_scalar('Margin Loss', margin_loss.item(), epoch)
+                # args.writer.add_scalar('Adv Disc Loss', adv_loss_disc.item(), epoch)
+                # args.writer.add_scalar('Adv Gen Loss', adv_loss_gen.item(), epoch)
+                # args.writer.add_scalar('Reconstruction Loss', reconstruction_loss.item(), epoch)
 
             del cls_images
 
         print('Train Epoch: {} Avg Loss: {:.4f} | Seen Class Acc: {:.4f} '.format(epoch, loss_record.avg,
                                                                                   train_acc_record.avg))
-
 
         try:
             tsne_features = torch.concat(tsne_features, dim = 0).detach().cpu()
@@ -510,7 +508,7 @@ if __name__ ==  "__main__":
 
     parser.add_argument('--max_kmeans_iter', type=int, default=10)
     parser.add_argument('--k_means_init', type=int, default=10)
-    parser.add_argument('--split', default=1, type=str)
+    parser.add_argument('--split', default=1, type=int)
     # ----------------------
     # INIThj
     # ----------------------

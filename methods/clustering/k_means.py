@@ -21,7 +21,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-def test_kmeans_semi_sup(merge_test_loader, args, K=None):
+def test_kmeans_semi_sup(model, merge_test_loader, args, K=None):
 
     """
     In this case, the test loader needs to have the labelled and unlabelled subsets of the training data
@@ -37,17 +37,24 @@ def test_kmeans_semi_sup(merge_test_loader, args, K=None):
 
     print('Collating features...')
     # First extract all features
-    for batch_idx, (feats, label, _, mask_lab_) in enumerate(tqdm(merge_test_loader)):
+    for batch_idx, data in enumerate(tqdm(merge_test_loader)):
 
-        feats = feats.to(device)
+        images, _, _, _, _, label, _, mask_lab_ = data
+        images = torch.cat(images, dim=0).to(args.device)
+        label = torch.cat([label for _ in range(2)]).to(args.device)
+        mask_lab_ = torch.concat([mask_lab_.bool().reshape(-1) for _ in range(2)]).to(args.device)
+        # images = images.cuda()
+
+        # Pass features through base model and then additional learnable transform (linear layer)
+        feats = model(images)
 
         feats = torch.nn.functional.normalize(feats, dim=-1)
 
-        all_feats.append(feats.cpu().numpy())
-        targets = np.append(targets, label.cpu().numpy())
+        all_feats.append(feats.detach().cpu().numpy())
+        targets = np.append(targets, label.detach().cpu().numpy())
         mask_cls = np.append(mask_cls, np.array([True if x.item() in range(len(args.train_classes))
                                          else False for x in label]))
-        mask_lab = np.append(mask_lab, mask_lab_.cpu().bool().numpy())
+        mask_lab = np.append(mask_lab, mask_lab_.detach().cpu().bool().numpy())
 
     # -----------------------
     # K-MEANS
@@ -66,7 +73,7 @@ def test_kmeans_semi_sup(merge_test_loader, args, K=None):
     kmeans = SemiSupKMeans(k=K, tolerance=1e-4, max_iterations=args.max_kmeans_iter, init='k-means++',
                            n_init=args.k_means_init, random_state=None, n_jobs=None, pairwise_batch_size=1024, mode=None)
 
-    l_feats, u_feats, l_targets, u_targets = (torch.from_numpy(x).to(device) for
+    l_feats, u_feats, l_targets, u_targets = (torch.from_numpy(x).to(args.device) for
                                               x in (l_feats, u_feats, l_targets, u_targets))
 
     kmeans.fit_mix(u_feats, l_feats, l_targets)
@@ -112,7 +119,10 @@ if __name__ == "__main__":
     parser.add_argument('--prop_train_labels', type=float, default=0.5)
     parser.add_argument('--eval_funcs', nargs='+', help='Which eval functions to use', default=['v1', 'v2'])
     parser.add_argument('--use_ssb_splits', type=str2bool, default=True)
+    #kmeans
 
+    parser.add_argument('--max_kmeans_iter', type=int, default=10)
+    parser.add_argument('--k_means_init', type=int, default=10)
     # ----------------------
     # INIT
     # ----------------------

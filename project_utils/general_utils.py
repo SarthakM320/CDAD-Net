@@ -3,7 +3,7 @@ import torch
 import random
 import numpy as np
 import inspect
-
+from os.path import join
 from torch.utils.tensorboard import SummaryWriter
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
@@ -154,7 +154,11 @@ def init_experiment(args, runner_name=None, exp_id=None):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     args.log_dir = log_dir
+    tsne_dir = join(log_dir, 'tsne_plots')
 
+    if not os.path.exists(tsne_dir):
+        os.makedirs(tsne_dir)
+    args.tsne_dir = tsne_dir
     # Instantiate directory to save models to
     model_root_dir = os.path.join(args.log_dir, 'checkpoints')
     if not os.path.exists(model_root_dir):

@@ -2,59 +2,24 @@ import os
 import pandas as pd
 import numpy as np
 from copy import deepcopy
-from scipy import io as mat_io
 import torch
 from torchvision.datasets.folder import default_loader
 from torch.utils.data import Dataset
-from torchvision import transforms
+from torch.utils.data import DataLoader
 from data.data_utils import subsample_instances
-
+from torchvision import transforms
+import torch.nn.functional as F
 root = ''
 
- # class OfficeHome(Dataset):
-
-#     def __init__(self, split='train', limit = 0, transform=None):
-#         self.loader = default_loader
-#         self.data = []
-#         self.target = []
-#         self.target_transform = None
-#         self.transform = transform
-
-#         if split == 'train':
-#             self.data = f'OfficeHomeDataset_10072016/{split}_2.csv'
-#         else:
-#             self.data = f'OfficeHomeDataset_10072016/{split}.csv'
-
-
-#         self.data = pd.read_csv(self.data)
-
-#         self.images = self.data['image'].values
-#         self.target = self.data['label'].values 
-#         self.uq_idxs = np.array(range(len(self)))
-
-#     def __len__(self):
-#         return len(self.target)
-    
-#     def __getitem__(self, idx):
-#         image = self.transform(self.loader(self.images[idx]))
-#         target = self.target[idx]
-
-#         if self.target_transform:
-#             target = self.target_transform(target)
-
-#         return image, target, self.uq_idxs[idx]
-    
-class OfficeHome(Dataset):
-    def __init__(self, split='train', num = 1, limit = 0, transform=None):
+class Cifar10(Dataset):
+    def __init__(self, split='train', type = 'labelled', limit = 0, transform=None):
         self.loader = default_loader
         self.target_transform = None
         self.transform = transform
-        
-
-        
-        self.data = f'../OfficeHomeDataset_10072016/{num}/{split}.csv'
-
-        self.data = pd.read_csv(self.data)
+        if split == 'train':
+            self.data = pd.read_csv(f'../cifar_10/{split}_{type}.csv')
+        else:
+            self.data = pd.read_csv(f'../cifar_10/{split}.csv')
         self.images = self.data['image'].values
         self.target = self.data['label'].values 
         self.uq_idxs = np.array(range(len(self)))
@@ -70,14 +35,15 @@ class OfficeHome(Dataset):
 
 
     def __len__(self):
-        return len(self.images)
+        return len(self.target)
     
     def __getitem__(self, idx):
 
-        image = self.transform(self.loader(self.images[idx]))
-        pos = self.transform(self.loader(self.pos[idx]))
-        neg = self.transform(self.loader(self.neg[idx]))
-        mask = torch.load(self.mask[idx], map_location = 'cpu')
+        image = self.transform(self.loader('../' + self.images[idx]))
+        pos = self.transform(self.loader('../' + self.pos[idx]))
+        neg = self.transform(self.loader('../' + self.neg[idx]))
+        mask = torch.load('../' + self.mask[idx], map_location = 'cpu')
+        mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(224,224), mode = 'bilinear', align_corners=True).squeeze(0).squeeze(0)
         label = self.target[idx]
         if isinstance(image, list):
             masked_image = [im*mask for im in image]
@@ -86,25 +52,23 @@ class OfficeHome(Dataset):
             masked_image = image*mask
 
 
-        return image, masked_image, pos, neg, mask, label, self.uq_idxs[idx]
-
+        return image, masked_image, pos, neg, mask, label, 0
 
 def subsample_dataset(dataset, idxs):
 
     mask = np.zeros(len(dataset)).astype('bool')
     mask[idxs] = True
 
-    dataset.samples = [(p, t) for i, (p, t) in enumerate(zip(dataset.images,dataset.target)) if i in idxs]
+    dataset.samples = [(p, t,po,ne,ma) for i, (p, t,po,ne,ma) in enumerate(zip(dataset.images,dataset.target, dataset.pos, dataset.neg, dataset.mask)) if i in idxs]
+    
+    dataset.uq_idxs = list(range(sum(mask)))
     print(len(dataset.uq_idxs))
-    print(len(mask))
-    dataset.uq_idxs = dataset.uq_idxs[mask]
 
     return dataset
 
-def subsample_classes(dataset, include_classes=range(45)):
+def subsample_classes(dataset, include_classes=range(5)):
 
     cls_idxs = [i for i, (p, t) in enumerate(zip(dataset.images,dataset.target)) if t in include_classes]
-
     # TODO: Don't transform targets for now
     # target_xform_dict = {}
     # for i, k in enumerate(include_classes):
@@ -135,16 +99,32 @@ def get_train_val_indices(train_dataset, val_split=0.2):
 
     return train_idxs, val_idxs
 
-def get_officehome_datasets(train_transform, test_transform, split, train_classes=range(45), prop_train_labels=0.8,
-                    split_train_val=False, seed=0):
+
+
+def get_cifar_10_datasets(train_transform, test_transform, train_classes=range(5), prop_train_labels=0.8,
+                    split_train_val=False, seed=0, split=0):
     np.random.seed(seed)
 
-    train_dataset_labelled = OfficeHome(transform=train_transform, split='train_labelled', num=split)
-    train_dataset_unlabelled = OfficeHome(transform=train_transform, split='train_unlabelled', num=split)
+    # whole_training_set = Cifar10(transform=train_transform)
+
+
+    train_dataset_labelled = Cifar10(transform=train_transform)
+    # subsample_indices = subsample_instances(train_dataset_labelled, prop_indices_to_subsample=prop_train_labels)
+    # train_dataset_labelled = subsample_dataset(train_dataset_labelled, subsample_indices)
+    
     # Split into training and validation sets
-    test_dataset = OfficeHome(transform=test_transform, split='test', num=split)
+    # train_idxs, val_idxs = get_train_val_indices(train_dataset_labelled)
+    # train_idxs = train_idxs + val_idxs
+    # train_dataset_labelled_split = subsample_dataset(deepcopy(train_dataset_labelled), train_idxs)
+
+    # Get unlabelled data
+    # unlabelled_indices = set(whole_training_set.uq_idxs) - set(train_dataset_labelled.uq_idxs)
+    train_dataset_unlabelled = Cifar10(transform=train_transform,type='unlabelled')
+    # Get test set for all classes
+    test_dataset = Cifar10(split='test', transform=test_transform)
 
     # Either split train into train and val or use test set as val
+    # train_dataset_labelled = train_dataset_labelled_split if split_train_val else train_dataset_labelled
 
     all_datasets = {
         'train_labelled': train_dataset_labelled,
@@ -152,6 +132,7 @@ def get_officehome_datasets(train_transform, test_transform, split, train_classe
         'val': None,
         'test': test_dataset,
     }
+    
 
     return all_datasets
     

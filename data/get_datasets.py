@@ -7,6 +7,10 @@ from data.imagenet import get_imagenet_100_datasets
 from data.cub import get_cub_datasets
 from data.fgvc_aircraft import get_aircraft_datasets
 from data.officehome import get_officehome_datasets
+from data.cifar_10 import get_cifar_10_datasets
+from data.cifar_100 import get_cifar_100_datasets
+from data.pacs import get_pacs_datasets
+from data.imagenet_100 import get_imagenet_100_datasets
 
 from data.cifar import subsample_classes as subsample_dataset_cifar
 from data.herbarium_19 import subsample_classes as subsample_dataset_herb
@@ -15,6 +19,10 @@ from data.imagenet import subsample_classes as subsample_dataset_imagenet
 from data.cub import subsample_classes as subsample_dataset_cub
 from data.fgvc_aircraft import subsample_classes as subsample_dataset_air
 from data.officehome import subsample_classes as subsample_dataset_officehome
+from data.cifar_10 import subsample_classes as subsample_dataset_cifar_10
+from data.cifar_100 import subsample_classes as subsample_dataset_cifar_100
+from data.pacs import subsample_classes as subsample_dataset_pacs
+from data.imagenet_100 import subsample_classes as subsample_dataset_imagenet_100
 
 from copy import deepcopy
 import pickle
@@ -25,23 +33,31 @@ from config import osr_split_dir
 sub_sample_class_funcs = {
     'cifar10': subsample_dataset_cifar,
     'cifar100': subsample_dataset_cifar,
-    'imagenet_100': subsample_dataset_imagenet,
+    'imagenet100': subsample_dataset_imagenet,
     'herbarium_19': subsample_dataset_herb,
     'cub': subsample_dataset_cub,
     'aircraft': subsample_dataset_air,
     'scars': subsample_dataset_scars,
-    'officehome':subsample_dataset_officehome
+    'officehome':subsample_dataset_officehome,
+    'cifar_10':subsample_dataset_cifar_10,
+    'cifar_100':subsample_dataset_cifar_100,
+    'pacs':subsample_dataset_pacs,
+    'imagenet_100':subsample_dataset_imagenet_100
 }
 
 get_dataset_funcs = {
     'cifar10': get_cifar_10_datasets,
     'cifar100': get_cifar_100_datasets,
-    'imagenet_100': get_imagenet_100_datasets,
+    'imagenet100': get_imagenet_100_datasets,
     'herbarium_19': get_herbarium_datasets,
     'cub': get_cub_datasets,
     'aircraft': get_aircraft_datasets,
     'scars': get_scars_datasets,
-    'officehome':get_officehome_datasets
+    'officehome':get_officehome_datasets,
+    'cifar_10': get_cifar_10_datasets,
+    'cifar_100':get_cifar_100_datasets,
+    'pacs':get_pacs_datasets,
+    'imagenet_100':get_imagenet_100_datasets
 }
 
 
@@ -63,7 +79,7 @@ def get_datasets(dataset_name, train_transform, test_transform, args):
     datasets = get_dataset_f(train_transform=train_transform, test_transform=test_transform,
                             train_classes=args.train_classes,
                             prop_train_labels=args.prop_train_labels,
-                            split_train_val=False)
+                            split_train_val=False, split = args.split)
 
     # Set target transforms:
     # target_transform_dict = {}
@@ -101,13 +117,13 @@ def get_class_splits(args):
     # -------------
     # GET CLASS SPLITS
     # -------------
-    if args.dataset_name == 'cifar10':
+    if args.dataset_name == 'cifar10' or args.dataset_name == 'cifar_10':
 
         args.image_size = 32
         args.train_classes = range(5)
         args.unlabeled_classes = range(5, 10)
 
-    elif args.dataset_name == 'cifar100':
+    elif args.dataset_name == 'cifar100' or args.dataset_name == 'cifar_100':
 
         args.image_size = 32
         args.train_classes = range(80)
@@ -202,6 +218,11 @@ def get_class_splits(args):
         args.image_size = 224
         args.train_classes = range(40)
         args.unlabeled_classes = range(40,65)
+    
+    elif args.dataset_name == 'pacs':
+        args.image_size = 224
+        args.train_classes = range(4)
+        args.unlabeled_classes = range(4,7)
 
     else:
 
